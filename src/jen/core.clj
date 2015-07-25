@@ -4,9 +4,11 @@
             [clojure.test.check.generators :as gen]
             [clojure.walk :as walk]))
 
-(def map->flatseq (comp (partial apply concat) seq))
+(def ^:private map->flatseq (comp (partial apply concat) seq))
 
 (defn ->generator
+  "Create a generator out of any value. Recursively walks maps, vectors, lists,
+  and sets to build a generator for an equivalent data structure."
   [x]
   (cond
     (gen/generator? x)
@@ -40,5 +42,20 @@
     (gen/return x)))
 
 (defn maybe
+  "Returns a generator that generates either nil or a value from the supplied
+  generator. Converts its argument to a generator if necessary."
   [x]
   (gen/one-of [(gen/return nil) (->generator x)]))
+
+(defn enum
+  "Returns a generator that generates one of the exact values in the given
+  collection. Does not convert elements into generators: see `either` if you need
+  more flexibility."
+  [& vals]
+  (gen/one-of (map gen/return vals)))
+
+(defn either
+  "Returns a generator that generates from one of the generators in the
+  given collection. Will convert elements into generators if necessary."
+  [& xs]
+  (gen/one-of (mapv ->generator xs)))

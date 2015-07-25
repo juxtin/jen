@@ -6,6 +6,10 @@
             [clojure.test.check.properties :as prop]
             [jen.core :refer :all]))
 
+(def map->flatseq
+  "Hacky import of private function"
+  @#'jen.core/map->flatseq)
+
 (deftest map->flatseq-test
   (testing "doesn't flatten keys or vals"
     (is (= '(:vec [1 2 3])
@@ -14,7 +18,7 @@
            (map->flatseq {[:key :vec] :val})))))
 
 (defspec map->flatseq-round-trip
-  100
+  25
   (prop/for-all [m (gen/hash-map :val1 gen/any
                                  :val2 gen/any
                                  :val3 gen/any)]
@@ -76,10 +80,10 @@
            :map {:three (sc/eq 3)
                  :int sc/Int}
            :set (sc/pred #(and (set? %)
+                               (= 3 (count %))
                                (contains? % 'one)
-                               (contains? % :three)
                                (some integer? %)
-                               (= 3 (count %))))
+                               (contains? % :three)))
            :list (sc/pred #(and (list? %)
                                 (= 3 (count %))
                                 (integer? (first %))
@@ -91,3 +95,24 @@
   (prop/for-all [m (->generator example)]
     (nil? (sc/check example-schema m))))
 
+(defspec maybe-test
+  5
+  (let [maybe-one-int-vec (sc/maybe (sc/pred #(and (vector %)
+                                                   (= 1 (count %))
+                                                   (integer? (first %)))))]
+    (prop/for-all [v (maybe [gen/int])]
+      (nil? (sc/check maybe-one-int-vec v)))))
+
+(defspec enum-test
+  25
+  (let [false-or-prime (sc/enum [false 2 3 5 7 11])]
+    (prop/for-all [x (enum [false 2 3 5 7 11])]
+      (nil? (sc/check false-or-prime x)))))
+
+(defspec either-test
+  10
+  (let [int-cool-or-charvec (sc/either sc/Int
+                                       (sc/eq :cool)
+                                       [(sc/pred char?)])]
+    (prop/for-all [x (either gen/int :cool (gen/vector gen/char))]
+      (nil? (sc/check int-cool-or-charvec x)))))
