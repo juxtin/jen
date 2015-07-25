@@ -8,7 +8,22 @@
 
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
-  and sets to build a generator for an equivalent data structure."
+  and sets to build a generator for an equivalent data structure. Generators
+  found within data structures are treated as positional, i.e., `[gen/int]` will
+  generate a vector with one integer rather than a vector of n integers.
+
+  Examples with (require '[clojure.test.check.generators :as gen]):
+  (gen/sample (->generator
+               {:int gen/int
+                :char-vec [gen/char gen/char]}))
+  #_=> '({:int 0, :char-vec [\t, \6]} ...)
+
+  (gen/sample (->generator #{gen/keyword}))
+  #_=> '(#{:b} ...)
+
+  (gen/sample (->generator
+               {:kw-int-map (gen/map gen/keyword gen/int)}))
+  #_=> '({:kw-int-map {:nV:21+:* -2}} ...)"
   [x]
   (cond
     (gen/generator? x)
