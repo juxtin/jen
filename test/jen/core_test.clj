@@ -24,6 +24,31 @@
                                  :val3 gen/any)]
     (= m (apply hash-map (map->flatseq m)))))
 
+(defspec map-with-optional-keys-test
+  25
+  (let [gen (->generator
+             {:req-int gen/int
+              :req-char gen/char
+              :req-vec [gen/string-alphanumeric gen/boolean]
+              :nested {(optional-key :keyword) gen/keyword}
+              (optional-key :opt-int) gen/int
+              (optional-key :opt-char) gen/char
+              (optional-key :opt-vec) [gen/int gen/int gen/int]})
+        schema {:req-int sc/Int
+                :req-char (sc/pred char?)
+                :req-vec (sc/pred #(and (vector? %)
+                                        (= 2 (count %))
+                                        (string? (first %))
+                                        (contains? #{true false} (second %))))
+                :nested {(sc/optional-key :keyword) sc/Keyword}
+                (sc/optional-key :opt-int) sc/Int
+                (sc/optional-key :opt-char) (sc/pred char?)
+                (sc/optional-key :opt-vec) (sc/pred #(and (vector? %)
+                                                          (= 3 (count %))
+                                                          (every? integer? %)))}]
+    (prop/for-all [x gen]
+      (nil? (sc/check schema x)))))
+
 (def example
   {:int gen/int
    :char gen/char
