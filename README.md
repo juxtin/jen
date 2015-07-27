@@ -13,6 +13,8 @@ The goal of this project is to bridge the gap by bringing some of the convenienc
 
 Note: you *must* add a dependency on [test.check](https://github.com/clojure/test.check) yourself.
 
+The main feature in jen is `jen.core/->generator`, which will turn just about anything into an ordinary test.check generator.
+
 ```clojure
 (ns jen-examples
   (:require [jen.core :as jen]
