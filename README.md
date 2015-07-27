@@ -67,12 +67,13 @@ These helper functions are provided to provide some familiar conveniences for sc
 * `enum`: wraps any number of bare values (not generators) and returns a generator that selects one of those values.
 * `either`: wraps any number of forms (including generators) and returns a generator that selects from the provided values/generators.
 * `optional-key`: wraps a **hash-map key** (only!) and alters the map's generator so that the wrapped key (and its accompanying value) may not appear.
-Note that unlike the other helper functions, this one **must** be used within a `jen.core/->generator` form.
+Note that unlike the above helper functions, this one **must** be used within a `jen.core/->generator` form.
+* `optional`: wraps any value in a vector, set, or list (not hash-maps!) so that it may not appear at all in the generated structure.
+Like `optional-key`, this function involves some magic and it won't work without `jen.core/->generator`.
 
 ## Future plans
 
 * ClojureScript support
-* an `optional` generator for vector/list/set types (`optional-key` is already implemented)
 * recursive generators
 
 Not planned: support for automatic conversion of schemas to generators.

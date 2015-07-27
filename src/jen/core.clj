@@ -6,6 +6,10 @@
 
 (declare optional-key?)
 
+(declare optional)
+
+(declare remove-absent)
+
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
   and sets to build a generator for an equivalent data structure. Generators
@@ -39,19 +43,20 @@
     (->> x
          (map ->generator)
          (apply gen/tuple)
-         (gen/fmap vec))
+         (gen/fmap (comp vec remove-absent)))
 
     (set? x)
     (->> x
-         (fmap ->generator)
+         (map ->generator)
          (apply gen/tuple)
-         (gen/fmap set))
+         (gen/fmap (comp set remove-absent)))
 
     (list? x)
     (->> x
          (map ->generator)
          (apply gen/tuple)
-         (gen/fmap (partial apply list)))
+         (gen/fmap (comp (partial apply list)
+                         remove-absent)))
 
     (optional-key? x)
     (throw (IllegalArgumentException.
@@ -91,14 +96,29 @@
   [key]
   (OptionalKey. key))
 
+(defn optional
+  "Wraps the given value (in a list, set, or vector) so that it may not occur in
+  the generated structure."
+  [val]
+  (gen/one-of [(gen/return ::remove) (->generator val)]))
+
 (def optional-key? (partial instance? OptionalKey))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Implementation
 
-(def ^:private map->flatseq (comp (partial apply concat) seq))
+(def ^:private map->flatseq
+  "Returns a sequence of every key and value in the given map.
 
-(defn- unwrap-optional
+  Ex: {:foo 1, :bar 2} -> '(:foo 1 :bar 2)"
+  (comp (partial apply concat) seq))
+
+(defn- remove-absent
+  "Given a collection that may contain ::remove'd optionals, actually remove them."
+  [coll]
+  (remove (partial = ::remove) coll))
+
+(defn- unwrap-optional-key
   [key]
   (if (optional-key? key)
     (.key key)
@@ -109,7 +129,7 @@
   [m]
   (->> m
        (filter (comp optional-key? key))
-       (map (fn [[k v]] [(unwrap-optional k) v]))
+       (map (fn [[k v]] [(unwrap-optional-key k) v]))
        (into {})))
 
 (defn- required-map

@@ -141,3 +141,39 @@
                                        [(sc/pred char?)])]
     (prop/for-all [x (either gen/int :cool (gen/vector gen/char))]
       (nil? (sc/check int-cool-or-charvec x)))))
+
+(defspec optional-vec-test
+  15
+  (let [vec-with-optional (->generator [(optional "Optional") gen/int])
+        test-schema (sc/pred #(and (vector? %)
+                                   (<= 1 (count %) 2)
+                                   (some integer? %)
+                                   (if (= 2 (count %))
+                                     (= "Optional" (first %))
+                                     true)))]
+    (prop/for-all [v vec-with-optional]
+      (nil? (sc/check test-schema v)))))
+
+(defspec optional-list-test
+  15
+  (let [list-with-optional (->generator (list (optional "Optional") gen/int))
+        test-schema (sc/pred #(and (list? %)
+                                   (<= 1 (count %) 2)
+                                   (some integer? %)
+                                   (if (= 2 (count %))
+                                     (= "Optional" (first %))
+                                     true)))]
+    (prop/for-all [v list-with-optional]
+      (nil? (sc/check test-schema v)))))
+
+(defspec optional-set-test
+  15
+  (let [set-with-optional (->generator #{(optional "Optional") gen/int})
+        test-schema (sc/pred #(and (set? %)
+                                   (<= 1 (count %) 2)
+                                   (some integer? %)
+                                   (if (= 2 (count %))
+                                     (contains? % "Optional")
+                                     true)))]
+    (prop/for-all [v set-with-optional]
+      (nil? (sc/check test-schema v)))))
