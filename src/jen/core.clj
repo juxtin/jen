@@ -104,6 +104,13 @@
 
 (def optional-key? (partial instance? OptionalKey))
 
+(defmacro with-recursive
+  [[recur base] generator]
+  `(let [gen-fn# (fn [g#]
+                   (let [~recur g#]
+                     (->generator ~generator)))]
+     (gen/recursive-gen gen-fn# (->generator ~base))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Implementation
 

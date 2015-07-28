@@ -17,5 +17,7 @@
   ([generator schema] (generator-sometimes-fits-schema? generator schema 100))
   ([generator schema n]
    (let [fits-schema? (comp nil? (sc/checker schema))
-         examples (take n (gen/sample generator))]
+         ;; for some reason, take n works better than the optional n argument to
+         ;; sample-seq
+         examples (take n (gen/sample-seq generator))]
      (boolean (some fits-schema? examples)))))

@@ -234,3 +234,51 @@
                                                                   (= 2 (count %))
                                                                   (contains? % :opty)
                                                                   (some integer? %)))))))
+
+(def BinaryTree
+  "A recursive schema for testing recursive generators. Borrowed from the
+  Prismatic/schema docs."
+  (sc/maybe
+   {:value long
+    :left (sc/recursive #'BinaryTree)
+    :right (sc/recursive #'BinaryTree)}))
+
+(def gen-binary-tree
+  (with-recursive [btree nil]
+    {:value gen/int
+     :left btree
+     :right btree}))
+
+(defspec recursive-map-spec
+  25
+  (test/generator-fits-schema-prop gen-binary-tree BinaryTree))
+
+(deftest recursive-map-test
+  (testing "when generating a binary tree"
+    (let [base {:value sc/Int
+                :left (sc/eq nil)
+                :right (sc/eq nil)}
+          left-child (assoc base :left BinaryTree)
+          right-child (assoc base :right BinaryTree)
+          both-children (assoc left-child :right BinaryTree)]
+      ;; Transient failures here are possible (and permissible), but they should
+      ;; be very rare.
+      (testing "the tree"
+        (testing "sometimes has no children"
+          (is (test/generator-sometimes-fits-schema? gen-binary-tree base 50)))
+        (testing "sometimes has only a left child"
+          (is (test/generator-sometimes-fits-schema? gen-binary-tree left-child 50)))
+        (testing "sometimes has only a right child"
+          (is (test/generator-sometimes-fits-schema? gen-binary-tree right-child 50)))
+        (testing "sometimes has two children"
+          (is (test/generator-sometimes-fits-schema? gen-binary-tree both-children 50)))))))
+
+(def NestedBoolVec
+  (sc/either (sc/enum true false)
+             [(sc/recursive #'NestedBoolVec)]))
+
+(defspec recursive-vec-spec
+  25
+  (let [gen-nested-bool-vec (with-recursive [nested-vec gen/boolean]
+                              (gen/vector nested-vec))]
+    (test/generator-fits-schema-prop gen-nested-bool-vec NestedBoolVec)))
