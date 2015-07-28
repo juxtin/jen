@@ -1,4 +1,4 @@
-(defproject jen "0.1.1"
+(defproject jen "0.1.2-SNAPSHOT"
   :description "Schema-style generators for test.check"
   :url "https://github.com/holguinj/jen"
   :license {:name "Eclipse Public License"
