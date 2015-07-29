@@ -3,12 +3,23 @@
             [schema.core :as sc]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
+            [jen.test-util :as test]
             [clojure.test.check.properties :as prop]
             [jen.core :refer :all]))
 
 (def map->flatseq
   "Hacky import of private function"
   @#'jen.core/map->flatseq)
+
+(deftest generator-sometimes-fits-schema-test
+  (let [gen gen/int]
+    (is (false? (test/generator-sometimes-fits-schema? gen sc/Str 10)))
+    (is (test/generator-sometimes-fits-schema? gen sc/Int 1))))
+
+(defspec map->flatseq-round-trip-spec
+  25
+  (prop/for-all [m (gen/map gen/any gen/any)]
+    (= m (apply hash-map (map->flatseq m)))))
 
 (deftest map->flatseq-test
   (testing "doesn't flatten keys or vals"
@@ -17,14 +28,16 @@
     (is (= '([:key :vec] :val)
            (map->flatseq {[:key :vec] :val})))))
 
-(defspec map->flatseq-round-trip
-  25
-  (prop/for-all [m (gen/hash-map :val1 gen/any
-                                 :val2 gen/any
-                                 :val3 gen/any)]
-    (= m (apply hash-map (map->flatseq m)))))
+(defspec ->generator-does-not-change-maps-spec
+  50
+  ;; as long as a map does not contain a generator, ->generator should turn
+  ;; it into a generator that only generates the original map
+  (prop/for-all [original (gen/map gen/any gen/any)]
+    (let [gen (->generator original)
+          generated-example (first (gen/sample gen 1))]
+      (= original generated-example))))
 
-(defspec map-with-optional-keys-test
+(defspec map-with-optional-keys-spec
   25
   (let [gen (->generator
              {:req-int gen/int
@@ -46,8 +59,20 @@
                 (sc/optional-key :opt-vec) (sc/pred #(and (vector? %)
                                                           (= 3 (count %))
                                                           (every? integer? %)))}]
-    (prop/for-all [x gen]
-      (nil? (sc/check schema x)))))
+    (test/generator-fits-schema-prop gen schema)))
+
+(deftest map-with-optional-keys-test
+  (let [gen (->generator {:req gen/int
+                          (optional-key :opt-1) gen/char-alpha
+                          (optional-key :opt-2) gen/char-alpha})
+        schema-no-optionals {:req sc/Int}
+        schema-opt-1 (assoc schema-no-optionals :opt-1 (sc/pred char?))
+        schema-opt-2 (assoc schema-no-optionals :opt-2 (sc/pred char?))
+        schema-with-both (merge schema-opt-1 schema-opt-2)]
+    (is (test/generator-sometimes-fits-schema? gen schema-no-optionals))
+    (is (test/generator-sometimes-fits-schema? gen schema-opt-1))
+    (is (test/generator-sometimes-fits-schema? gen schema-opt-2))
+    (is (test/generator-sometimes-fits-schema? gen schema-with-both))))
 
 (def example
   {:int gen/int
@@ -115,34 +140,49 @@
                                 (= 2 (second %))
                                 (char? (last %))))}})
 
-(defspec validate-complex-generator
+(defspec validate-complex-generator-spec
   100
-  (prop/for-all [m (->generator example)]
-    (nil? (sc/check example-schema m))))
+  (let [gen (->generator example)]
+    (test/generator-fits-schema-prop gen example-schema)))
 
-(defspec maybe-test
+(defspec maybe-spec
   5
   (let [maybe-one-int-vec (sc/maybe (sc/pred #(and (vector %)
                                                    (= 1 (count %))
                                                    (integer? (first %)))))]
-    (prop/for-all [v (maybe [gen/int])]
-      (nil? (sc/check maybe-one-int-vec v)))))
+    (test/generator-fits-schema-prop (maybe [gen/int]) maybe-one-int-vec)))
 
-(defspec enum-test
+(deftest maybe-test
+  (let [gen (maybe [gen/int])]
+    (is (test/generator-sometimes-fits-schema? gen (sc/eq nil)))
+    (is (test/generator-sometimes-fits-schema? gen [(sc/one sc/Int "int")]))))
+
+(defspec enum-spec
   25
-  (let [false-or-prime (sc/enum [false 2 3 5 7 11])]
-    (prop/for-all [x (enum [false 2 3 5 7 11])]
-      (nil? (sc/check false-or-prime x)))))
+  (let [gen (enum false 2 3 5 7 11)
+        false-or-prime (sc/enum false 2 3 5 7 11)]
+    (test/generator-fits-schema-prop gen false-or-prime)))
 
-(defspec either-test
+(deftest enum-test
+  (let [gen (enum :night :day)]
+    (is (test/generator-sometimes-fits-schema? gen (sc/eq :night)))
+    (is (test/generator-sometimes-fits-schema? gen (sc/eq :day)))))
+
+(defspec either-spec
   10
-  (let [int-cool-or-charvec (sc/either sc/Int
+  (let [gen (either gen/int :cool (gen/vector gen/char))
+        int-cool-or-charvec (sc/either sc/Int
                                        (sc/eq :cool)
                                        [(sc/pred char?)])]
-    (prop/for-all [x (either gen/int :cool (gen/vector gen/char))]
-      (nil? (sc/check int-cool-or-charvec x)))))
+    (test/generator-fits-schema-prop gen int-cool-or-charvec)))
 
-(defspec optional-vec-test
+(deftest either-test
+  (let [gen (either gen/int :radical (gen/vector gen/boolean))]
+    (is (test/generator-sometimes-fits-schema? gen sc/Int))
+    (is (test/generator-sometimes-fits-schema? gen (sc/eq :radical)))
+    (is (test/generator-sometimes-fits-schema? gen [(sc/enum true false)]))))
+
+(defspec optional-vec-spec
   15
   (let [vec-with-optional (->generator [(optional "Optional") gen/int])
         test-schema (sc/pred #(and (vector? %)
@@ -151,10 +191,14 @@
                                    (if (= 2 (count %))
                                      (= "Optional" (first %))
                                      true)))]
-    (prop/for-all [v vec-with-optional]
-      (nil? (sc/check test-schema v)))))
+    (test/generator-fits-schema-prop vec-with-optional test-schema)))
 
-(defspec optional-list-test
+(deftest optional-vec-test
+  (let [gen (->generator [(optional :opty) gen/int])]
+    (is (test/generator-sometimes-fits-schema? gen [(sc/one (sc/eq :opty) "Opty") (sc/one sc/Int "int")]))
+    (is (test/generator-sometimes-fits-schema? gen [(sc/one sc/Int "int")]))))
+
+(defspec optional-list-spec
   15
   (let [list-with-optional (->generator (list (optional "Optional") gen/int))
         test-schema (sc/pred #(and (list? %)
@@ -163,10 +207,14 @@
                                    (if (= 2 (count %))
                                      (= "Optional" (first %))
                                      true)))]
-    (prop/for-all [v list-with-optional]
-      (nil? (sc/check test-schema v)))))
+    (test/generator-fits-schema-prop list-with-optional test-schema)))
 
-(defspec optional-set-test
+(deftest optional-list-test
+  (let [gen (->generator (list (optional :opty) gen/int))]
+    (is (test/generator-sometimes-fits-schema? gen [(sc/one (sc/eq :opty) "opty") (sc/one sc/Int "int")]))
+    (is (test/generator-sometimes-fits-schema? gen [(sc/one sc/Int "int")]))))
+
+(defspec optional-set-spec
   15
   (let [set-with-optional (->generator #{(optional "Optional") gen/int})
         test-schema (sc/pred #(and (set? %)
@@ -175,5 +223,14 @@
                                    (if (= 2 (count %))
                                      (contains? % "Optional")
                                      true)))]
-    (prop/for-all [v set-with-optional]
-      (nil? (sc/check test-schema v)))))
+    (test/generator-fits-schema-prop set-with-optional test-schema)))
+
+(deftest optional-set-test
+  (let [gen (->generator #{(optional :opty) gen/int})]
+    (is (test/generator-sometimes-fits-schema? gen (sc/pred #(and (set? %)
+                                                                  (= 1 (count %))
+                                                                  (every? integer? %)))))
+    (is (test/generator-sometimes-fits-schema? gen (sc/pred #(and (set? %)
+                                                                  (= 2 (count %))
+                                                                  (contains? % :opty)
+                                                                  (some integer? %)))))))
