@@ -111,6 +111,68 @@
                      (->generator ~generator)))]
      (gen/recursive-gen gen-fn# (->generator ~base))))
 
+(deftype ^:private If [pred then else])
+
+(defn if?
+  [pred then else]
+  {:pre (ifn? pred)}
+  (If. pred (->generator then) (->generator else)))
+
+(def if-type? (partial instance? jen.core.If))
+
+(def if-ex
+  {:foo gen/int
+   :even? (if? #(even? (:foo %))
+               true
+               false)})
+
+(def if-ex-gen
+  (->generator if-ex))
+
+(defn- if-replacer
+  [new-gen if-type]
+  (fn [x]
+    (if (identical? x if-type)
+      new-gen
+      x)))
+
+(defn- collect-if-types
+  [coll]
+  (let [candidates (if (map? coll)
+                     (vals coll)
+                     coll)]
+    (filter if-type? candidates)))
+
+(defn- update-with-if-type
+  [coll if-type]
+  (let [pred (.pred if-type)
+        new-gen (if (pred coll)
+                  (.then if-type)
+                  (.else if-type))
+        replace (if-replacer new-gen if-type)]
+    (fmap replace coll)))
+
+(defn- contains-if?
+  [coll]
+  (-> coll
+      collect-if-types
+      not-empty
+      boolean))
+
+(defn bind-if
+  [gen]
+  (gen/bind gen
+            (fn [val]
+              (let [if-types (collect-if-types val)]
+                (println "if-types:" if-types)
+                (loop [acc     val
+                       rem-ifs if-types]
+                  (println "acc:" acc)
+                  (if-let [if-type (first (not-empty rem-ifs))]
+                    (recur (update-with-if-type acc if-type)
+                           (rest if-types))
+                    (->generator acc)))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Implementation
 
