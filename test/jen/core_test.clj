@@ -296,6 +296,22 @@
                     (assoc base :even? (sc/eq false)))]
     (test/generator-fits-schema-prop if-gen if-schema)))
 
+(defspec map-if?-with-optional-key-spec
+  25
+  ;; if? should be handled _after_ optional-keys resolve
+  (let [if-gen (->generator
+                {(optional-key :greeting) "Hello"
+                 :polite? (if? :greeting
+                               true
+                               false)})
+        schema (sc/pred (fn [m]
+                          (and (map? m)
+                               (<= 1 (count m) 2)
+                               (if (:greeting m)
+                                 (true? (:polite? m))
+                                 (false? (:polite? m))))))]
+    (test/generator-fits-schema-prop if-gen schema)))
+
 (defspec map-double-if?-gen-spec
   25
   (let [if-gen (->generator
