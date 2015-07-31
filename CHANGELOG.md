@@ -1,4 +1,4 @@
-## 0.1.2-SNAPSHOT (unreleased)
+## 0.1.2
  * Add support for recursive generators using `with-recursive`.
  * Add `jen.test-util` namespace with a couple of useful functions for validating generators.
 
