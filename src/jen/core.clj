@@ -10,6 +10,8 @@
 
 (declare remove-absent)
 
+(declare bind-if)
+
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
   and sets to build a generator for an equivalent data structure. Generators
@@ -120,15 +122,6 @@
 
 (def if-type? (partial instance? jen.core.If))
 
-(def if-ex
-  {:foo gen/int
-   :even? (if? #(even? (:foo %))
-               true
-               false)})
-
-(def if-ex-gen
-  (->generator if-ex))
-
 (defn- if-replacer
   [new-gen if-type]
   (fn [x]
@@ -137,11 +130,12 @@
       x)))
 
 (defn- collect-if-types
+  "Returns nil instead of empty"
   [coll]
   (let [candidates (if (map? coll)
                      (vals coll)
                      coll)]
-    (filter if-type? candidates)))
+    (not-empty (filter if-type? candidates))))
 
 (defn- update-with-if-type
   [coll if-type]
@@ -160,18 +154,25 @@
       boolean))
 
 (defn bind-if
+  ;; TODO: this inefficiently adds an extra step to all generators, just to
+  ;; check if they have any conditionals. Since conditionals are intended to be
+  ;; rare, that's a bad idea.
+
+  ;; Better to check whether this is needed on a per-collection-type basis,
+  ;; which would mean finally refactoring each of the ->generator cond bodies
+  ;; into their own functions.
   [gen]
   (gen/bind gen
             (fn [val]
-              (let [if-types (collect-if-types val)]
-                (println "if-types:" if-types)
+              (if-let [if-types (collect-if-types val)]
                 (loop [acc     val
                        rem-ifs if-types]
-                  (println "acc:" acc)
-                  (if-let [if-type (first (not-empty rem-ifs))]
+                  (if-let [if-type (first rem-ifs)]
                     (recur (update-with-if-type acc if-type)
-                           (rest if-types))
-                    (->generator acc)))))))
+                           (next rem-ifs))
+                    (->generator acc)))
+                ;; else, no if-types present
+                (->generator val)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Implementation
@@ -250,9 +251,12 @@
 (defn- map->generator
   "Returns a generator for the given map schema, which may or may not include any optional keys."
   [m]
-  (if (some (comp optional-key? key) m)
-    (map-with-optional-keys m)
-    (->> m
-         (fmap ->generator)
-         map->flatseq
-         (apply gen/hash-map))))
+  (let [gen (if (some (comp optional-key? key) m)
+              (map-with-optional-keys m)
+              (->> m
+                   (fmap ->generator)
+                   map->flatseq
+                   (apply gen/hash-map)))]
+    (if (contains-if? m)
+      (bind-if gen)
+      gen)))

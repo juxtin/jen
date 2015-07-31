@@ -5,7 +5,7 @@
             [clojure.test.check.generators :as gen]
             [jen.test-util :as test]
             [clojure.test.check.properties :as prop]
-            [jen.core :refer :all]))
+            [jen.core :refer :all :as jen]))
 
 (def map->flatseq
   "Hacky import of private function"
@@ -282,3 +282,54 @@
   (let [gen-nested-bool-vec (with-recursive [nested-vec gen/boolean]
                               (gen/vector nested-vec))]
     (test/generator-fits-schema-prop gen-nested-bool-vec NestedBoolVec)))
+
+(defspec map-single-if?-gen-spec
+  25
+  (let [if-gen (->generator
+                {:num gen/int
+                 :even? (if? (comp even? :num)
+                             true
+                             false)})
+        base {:num sc/Int}
+        if-schema (sc/if (comp even? :num)
+                    (assoc base :even? (sc/eq true))
+                    (assoc base :even? (sc/eq false)))]
+    (test/generator-fits-schema-prop if-gen if-schema)))
+
+(defspec map-double-if?-gen-spec
+  25
+  (let [if-gen (->generator
+                {:num gen/int
+                 :type (enum :int :char)
+                 :even? (if? (comp even? :num)
+                               true
+                               false)
+                 :example (if? #(= :int (:type %))
+                               gen/int
+                               gen/char-alpha)})
+        basic-schema {:num sc/Int
+                      :type (sc/enum :int :char)
+                      :even? (sc/enum true false)
+                      :example (sc/either sc/Int (sc/pred char?))}
+        if-schema (sc/pred (fn [{:keys [num type even? example]}]
+                             (and (= even? (clojure.core/even? num))
+                                  (if (= :int type)
+                                    (integer? example)
+                                    (char? example)))))
+        schema (sc/both basic-schema if-schema)]
+    (test/generator-fits-schema-prop if-gen schema)))
+
+(defspec vec-single-if?-gen-spec
+  25
+  (let [if-gen (->generator
+                [(if? (comp integer? second)
+                      :int
+                      :char)
+                 (either gen/int gen/char)])
+        schema (sc/pred (fn [v]
+                          (and (vector? v)
+                               (= 2 (count v))
+                               (if (= :int (first v))
+                                 (integer? (second v))
+                                 (char? (second v))))))]
+    (test/generator-fits-schema-prop if-gen schema)))
