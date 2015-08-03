@@ -14,6 +14,8 @@
 
 (declare vec->generator)
 
+(declare set->generator)
+
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
   and sets to build a generator for an equivalent data structure. Generators
@@ -47,17 +49,14 @@
     (vec->generator x)
 
     (set? x)
-    (->> x
-         (map ->generator)
-         (apply gen/tuple)
-         (gen/fmap (comp set remove-absent)))
+    (set->generator x)
 
     (list? x)
     (->> x
-         (map ->generator)
-         (apply gen/tuple)
-         (gen/fmap (comp (partial apply list)
-                         remove-absent)))
+      (map ->generator)
+      (apply gen/tuple)
+      (gen/fmap (comp (partial apply list)
+                      remove-absent)))
 
     (optional-key? x)
     (throw (IllegalArgumentException.
@@ -148,9 +147,9 @@
 (defn- contains-if?
   [coll]
   (-> coll
-      collect-if-types
-      not-empty
-      boolean))
+    collect-if-types
+    not-empty
+    boolean))
 
 (defn bind-if
   ;; TODO: this inefficiently adds an extra step to all generators, just to
@@ -197,17 +196,17 @@
   "Returns the subset of the given map with optional keys."
   [m]
   (->> m
-       (filter (comp optional-key? key))
-       (map (fn [[k v]] [(unwrap-optional-key k) v]))
-       (into {})))
+    (filter (comp optional-key? key))
+    (map (fn [[k v]] [(unwrap-optional-key k) v]))
+    (into {})))
 
 (defn- required-map
   "Returns the subset of the given map with required keys. Keys are assumed to
   be required if they are not wrapped in optional-key."
   [m]
   (->> m
-       (filter (comp not optional-key? key))
-       (into {})))
+    (filter (comp not optional-key? key))
+    (into {})))
 
 (def ^:private split-map-by-required
   "Returns a pair of maps, the first of which contains only required keys and
@@ -219,46 +218,51 @@
   pairs and/or nils. Map -> Gen Seq Maybe Pair"
   [m]
   (->> m
-       (mapv maybe)
-       ->generator))
+    (mapv maybe)
+    ->generator))
 
 (defn- maybe-kvs->map
   "Given a sequence of maybe kv-pairs, discard the nils and create a map
   out of the rest. Operates on concrete values, not generators."
   [kvs]
   (->> kvs
-       (remove nil?)
-       (into {})))
+    (remove nil?)
+    (into {})))
 
 (defn- opt-map->map-gen
   "Given a map of (assumed) optional key-value pairs, return a generator for a map of some
   subset of them. Optional keys should be unwrapped *before* calling this function."
   [m]
   (->> (map->maybe-kvs m)
-       (gen/fmap maybe-kvs->map)))
+    (gen/fmap maybe-kvs->map)))
+
+(defn- guarded-bind-if
+  [original generator]
+  (if (contains-if? original)
+    (bind-if generator)
+    generator))
 
 (defn- map-with-optional-keys
   "Returns a generator for the given map schema, which is assumed to contain one
   or more optional keys."
   [m]
   (let [[required optional] (split-map-by-required m)
-        gen-opt-map (opt-map->map-gen optional)]
-    (-> gen-opt-map
-        (gen/bind (fn [opt-map]
-                    (->generator (merge opt-map required)))))))
+        gen-opt-map (opt-map->map-gen optional)
+        gen-with-opts (-> gen-opt-map
+                        (gen/bind (fn [opt-map]
+                                    (->generator (merge opt-map required)))))]
+    (guarded-bind-if m gen-with-opts)))
 
 (defn- map->generator
   "Returns a generator for the given map schema, which may or may not include any optional keys."
   [m]
-  (let [gen (if (some (comp optional-key? key) m)
-              (map-with-optional-keys m)
-              (->> m
-                   (fmap ->generator)
-                   map->flatseq
-                   (apply gen/hash-map)))]
-    (if (contains-if? m)
-      (bind-if gen)
-      gen)))
+  (if (some (comp optional-key? key) m)
+    (map-with-optional-keys m)
+    (->> m
+      (fmap ->generator)
+      map->flatseq
+      (apply gen/hash-map)
+      (guarded-bind-if m))))
 
 (defn- vec->generator
   [v]
@@ -267,5 +271,15 @@
               (apply gen/tuple)
               (gen/fmap (comp vec remove-absent)))]
     (if (contains-if? v)
+      (bind-if gen)
+      gen)))
+
+(defn- set->generator
+  [s]
+  (let [gen (->> s
+              (map ->generator)
+              (apply gen/tuple)
+              (gen/fmap (comp set remove-absent)))]
+    (if (contains-if? s)
       (bind-if gen)
       gen)))
