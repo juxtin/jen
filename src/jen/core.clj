@@ -16,6 +16,8 @@
 
 (declare set->generator)
 
+(declare list->generator)
+
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
   and sets to build a generator for an equivalent data structure. Generators
@@ -52,11 +54,7 @@
     (set->generator x)
 
     (list? x)
-    (->> x
-      (map ->generator)
-      (apply gen/tuple)
-      (gen/fmap (comp (partial apply list)
-                      remove-absent)))
+    (list->generator x)
 
     (optional-key? x)
     (throw (IllegalArgumentException.
@@ -266,20 +264,33 @@
 
 (defn- vec->generator
   [v]
-  (let [gen (->> v
-              (map ->generator)
-              (apply gen/tuple)
-              (gen/fmap (comp vec remove-absent)))]
-    (if (contains-if? v)
-      (bind-if gen)
-      gen)))
+  (->> v
+    (map ->generator)
+    (apply gen/tuple)
+    (gen/fmap (comp vec remove-absent))
+    (guarded-bind-if v)))
 
 (defn- set->generator
   [s]
-  (let [gen (->> s
-              (map ->generator)
-              (apply gen/tuple)
-              (gen/fmap (comp set remove-absent)))]
-    (if (contains-if? s)
-      (bind-if gen)
-      gen)))
+  (->> s
+    (map ->generator)
+    (apply gen/tuple)
+    (gen/fmap (comp set remove-absent))
+    (guarded-bind-if s)))
+
+(defn- ->list
+  [coll]
+  (->> coll
+    reverse
+    (into ())))
+
+(defn- list->generator
+  [l]
+  ;; TODO the only thing wrong with this is that you can't write a condition
+  ;; based on whether something is missing
+  ;; figure out why I can't move guarded-bind-if one expression down
+  (->> l
+    (map ->generator)
+    (apply gen/tuple)
+    (guarded-bind-if l)
+    (gen/fmap (comp ->list remove-absent))))

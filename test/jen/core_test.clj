@@ -354,13 +354,29 @@
   25
   (let [if-gen (->generator
                 #{(if? (partial some integer?)
-                      :int
-                      :char)
-                 (either gen/int gen/char)})
+                       :int
+                       :char)
+                  (either gen/int gen/char)})
         schema (sc/pred (fn [s]
                           (and (set? s)
                                (= 2 (count s))
+                               (some #{:int :char} s)
                                (if (contains? s :int)
                                  (some integer? s)
                                  (some char? s)))))]
+    (test/generator-fits-schema-prop if-gen schema)))
+
+(defspec list-single-if?-gen-spec
+  25
+  (let [if-gen (->generator
+                (list (if? (comp integer? second)
+                           :int
+                           :char)
+                      (either gen/int gen/char)))
+        schema (sc/pred (fn [v]
+                          (and (list? v)
+                               (= 2 (count v))
+                               (if (= :int (first v))
+                                 (integer? (second v))
+                                 (char? (second v))))))]
     (test/generator-fits-schema-prop if-gen schema)))
