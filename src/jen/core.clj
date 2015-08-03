@@ -12,6 +12,8 @@
 
 (declare bind-if)
 
+(declare vec->generator)
+
 (defn ->generator
   "Create a generator out of any value. Recursively walks maps, vectors, lists,
   and sets to build a generator for an equivalent data structure. Generators
@@ -42,10 +44,7 @@
     (->generator (vec x))
 
     (vector? x)
-    (->> x
-         (map ->generator)
-         (apply gen/tuple)
-         (gen/fmap (comp vec remove-absent)))
+    (vec->generator x)
 
     (set? x)
     (->> x
@@ -258,5 +257,15 @@
                    map->flatseq
                    (apply gen/hash-map)))]
     (if (contains-if? m)
+      (bind-if gen)
+      gen)))
+
+(defn- vec->generator
+  [v]
+  (let [gen (->> v
+              (map ->generator)
+              (apply gen/tuple)
+              (gen/fmap (comp vec remove-absent)))]
+    (if (contains-if? v)
       (bind-if gen)
       gen)))
