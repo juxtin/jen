@@ -2,7 +2,9 @@
 
 [![Clojars Project](http://clojars.org/jen/latest-version.svg)](http://clojars.org/jen)
 
-A Clojure library that provides a more friendly syntax for defining [test.check](https://github.com/clojure/test.check) generators based on Clojure data structures, inspired by [Prismatic/schema](https://github.com/Prismatic/schema).
+jen is a Clojure library that provides a more friendly syntax for defining [test.check](https://github.com/clojure/test.check) generators based on Clojure data structures, inspired by [Prismatic/schema](https://github.com/Prismatic/schema).
+
+Read the [generated reference documentation here](http://holguinj.github.io/jen/doc/), or read on for an overview.
 
 ## motivation
 
@@ -95,8 +97,8 @@ Instead, we have the `with-recursive` macro, which takes a vector of the form `[
 
 (def gen-binary-tree
   "A generator for binary trees using jen's `with-recursive` macro"
-  (with-recursive [btree ;; we'll use btree to refer to this generator recursively
-                   nil]  ;; the second part of the vector is the base (non-recursive) case
+  (jen/with-recursive [btree ;; we'll use btree to refer to this generator recursively
+                       nil]  ;; the second part of the vector is the base (non-recursive) case
     {:value gen/int
      :left btree
      :right btree}))

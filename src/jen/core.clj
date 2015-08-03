@@ -67,6 +67,8 @@
     (gen/return x)))
 
 (deftype ^:private OptionalKey [key])
+;; even private type constructors are public by default
+(alter-meta! #'->OptionalKey assoc :private true)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Public helpers
@@ -102,9 +104,25 @@
   [val]
   (gen/one-of [(gen/return ::remove) (->generator val)]))
 
-(def optional-key? (partial instance? OptionalKey))
+(def ^:private optional-key? (partial instance? OptionalKey))
 
 (defmacro with-recursive
+  "Creates a recursive generator. The first argument is a vector of two elements:
+
+  First: a symbol to be used to refer recursively to the generator
+  Second: the base (non-recursive) case, which can be any value or generator.
+
+  The `generator` argument can be any data structure, where any occurrences of
+  the chosen symbol will be replaced either by a nested generated value or an
+  instance of the base case.
+
+  Example:
+  (def gen-binary-tree
+    (jen/with-recursive [btree ;; we'll use btree to refer to this generator recursively
+                         nil]  ;; the second part of the vector is the base (non-recursive) case
+      {:value gen/int
+       :left btree
+       :right btree}))"
   [[recur base] generator]
   `(let [gen-fn# (fn [g#]
                    (let [~recur g#]
